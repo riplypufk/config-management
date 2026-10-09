@@ -1,0 +1,5 @@
+ls
+cd /home
+cd $HOME
+unknown_command
+ls

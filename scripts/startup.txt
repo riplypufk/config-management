@@ -1,5 +1,7 @@
 ls
 cd /home
 cd $HOME
+vfs-save /tmp/startup_saved.zip
 unknown_command
 ls
+

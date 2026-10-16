@@ -1,0 +1,15 @@
+
+pwd
+ls
+touch stage5_file.txt
+ls
+touch stage5_file.txt
+mv stage5_file.txt renamed.txt
+ls
+mv renamed.txt docs
+ls docs
+mv docs/renamed.txt docs/final.txt
+ls docs
+history
+vfs-save /tmp/stage5_saved.zip
+mv missing.txt another.txt

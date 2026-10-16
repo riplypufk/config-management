@@ -6,6 +6,8 @@ import zipfile
 from pathlib import PurePosixPath
 
 VFS_NAME = "user"
+MV_ARGUMENTS_COUNT = 2
+TOUCH_ARGUMENTS_COUNT = 1
 
 class VirtualFileSystem:
     def __init__(self):
@@ -124,6 +126,89 @@ class VirtualFileSystem:
         return self.normalize_path(
             self.current_dir + "/" + path
         )
+    def touch(self, path):
+        path = self.resolve_path(path)
+        if path in self.nodes:
+            if self.nodes[path]["type"] == "dir":
+                raise ValueError(f"Это каталог: {path}")
+            return
+
+        parent = str(PurePosixPath(path).parent)
+        if parent not in self.nodes:
+            raise ValueError(f"Каталог не найден: {parent}")
+        if self.nodes[parent]["type"] != "dir":
+            raise ValueError(f"Это не каталог: {parent}")
+        self.nodes[path] = {
+            "type": "file",
+            "data": base64.b64encode(b"").decode("ascii")
+        }
+
+
+    
+    def _validate_move_source(self, source):
+        if source == "/" or source not in self.nodes:
+            raise ValueError(f"Источник не найден: {source}")
+
+    def _prepare_move_destination(self, source, destination):
+        if destination == source:
+            raise ValueError("Источник и назначение совпадают")
+        if destination in self.nodes:
+            if self.nodes[destination]["type"] != "dir":
+                raise ValueError(f"Путь уже существует: {destination}")
+
+            name = PurePosixPath(source).name
+            destination = self.normalize_path(
+                destination + "/" + name
+            )
+        return destination
+    
+    def _validate_move_parent(self, destination):
+        parent = str(PurePosixPath(destination).parent)
+        if (
+            parent not in self.nodes
+            or self.nodes[parent]["type"] != "dir"
+        ):
+            raise ValueError(
+                f"Каталог назначения не найден: {parent}"
+            )
+    def _move_subtree(self, source, destination):
+        moved = {
+            path: node
+            for path, node in self.nodes.items()
+            if path == source
+            or path.startswith(source.rstrip("/") + "/")
+        }
+        for path in moved:
+            del self.nodes[path]
+        for path, node in moved.items():
+            new_path = destination + path[len(source):]
+            self.nodes[new_path] = node
+
+    def _update_current_dir(self, source, destination):
+        if (
+            self.current_dir == source
+            or self.current_dir.startswith(
+                source.rstrip("/") + "/"
+            )
+        ):
+            self.current_dir = (
+                destination + self.current_dir[len(source):]
+            )
+    def move(self, source, destination):
+        source = self.resolve_path(source)
+        destination = self.resolve_path(destination)
+        self._validate_move_source(source)
+        destination = self._prepare_move_destination(
+            source, destination
+        )
+        self._validate_move_parent(destination)
+
+        if destination.startswith(source.rstrip("/") + "/"):
+            raise ValueError(
+                "Нельзя переместить каталог внутрь себя"
+            )
+        self._move_subtree(source, destination)
+        self._update_current_dir(source, destination)
 
 
     def _validate_directory(self, path):
@@ -255,6 +340,30 @@ def command_history(args, vfs):
     return "ok"
 
 
+def command_touch(args, vfs):
+    if len(args) != TOUCH_ARGUMENTS_COUNT:
+        print("touch: укажите один путь к файлу")
+        return "error"
+    try:
+        vfs.touch(args[0])
+    except ValueError as error:
+        print(f"touch: {error}")
+        return "error"
+    return "ok"
+
+
+def command_mv(args, vfs):
+    if len(args) != MV_ARGUMENTS_COUNT:
+        print("mv: укажите исходный и целевой пути")
+        return "error"
+    try:
+        vfs.move(args[0], args[1])
+    except ValueError as error:
+        print(f"mv: {error}")
+        return "error"
+    return "ok"
+
+
 def command_vfs_save(args, vfs):
     if len(args) != 1:
         print("vfs-save: укажите один путь для сохранения ZIP")
@@ -274,6 +383,8 @@ def execute_command(command, args, vfs):
         "cd": command_cd,
         "pwd": command_pwd,
         "history": command_history,
+        "touch": command_touch,
+        "mv": command_mv,
         "vfs-save": command_vfs_save,
     }
 
